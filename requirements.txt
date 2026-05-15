@@ -1,0 +1,5 @@
+flask
+nose
+pinocchio
+coverage
+flake8

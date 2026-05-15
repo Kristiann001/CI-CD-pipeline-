@@ -1,0 +1,117 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: cd-pipeline
+spec:
+  workspaces:
+    - name: pipeline-workspace
+
+  params:
+    - name: build-image
+      type: string
+      description: The image to build and push
+    - name: repo-url
+      type: string
+      description: The git repo URL to clone from
+    - name: branch
+      type: string
+      description: The git branch to clone
+      default: "main"
+    - name: app-name
+      type: string
+      description: The name of the application
+      default: "counter-app"
+    - name: database_uri
+      type: string
+      description: The database connection string
+      default: "redis://redis:6379"
+
+  tasks:
+    # ── Task 1: Cleanup workspace ──
+    - name: cleanup
+      taskRef:
+        name: cleanup
+      workspaces:
+        - name: source
+          workspace: pipeline-workspace
+
+    # ── Task 2: Clone source code ──
+    - name: clone
+      taskRef:
+        name: git-clone
+        kind: ClusterTask
+      workspaces:
+        - name: output
+          workspace: pipeline-workspace
+      params:
+        - name: url
+          value: $(params.repo-url)
+        - name: revision
+          value: $(params.branch)
+        - name: deleteExisting
+          value: "true"
+      runAfter:
+        - cleanup
+
+    # ── Task 3: Lint with flake8 ──
+    - name: lint
+      taskRef:
+        name: flake8
+        kind: ClusterTask
+      workspaces:
+        - name: source
+          workspace: pipeline-workspace
+      params:
+        - name: image
+          value: "python:3.9-slim"
+        - name: args
+          value: ["--count", "--max-complexity=10", "--max-line-length=127", "--statistics"]
+      runAfter:
+        - clone
+
+    # ── Task 4: Run unit tests with nose ──
+    - name: tests
+      taskRef:
+        name: nose
+      workspaces:
+        - name: source
+          workspace: pipeline-workspace
+      params:
+        - name: database_uri
+          value: $(params.database_uri)
+        - name: args
+          value: "-v --with-spec --spec-color --with-coverage --cover-package=app"
+      runAfter:
+        - lint
+
+    # ── Task 5: Build container image ──
+    - name: build
+      taskRef:
+        name: buildah
+        kind: ClusterTask
+      workspaces:
+        - name: source
+          workspace: pipeline-workspace
+      params:
+        - name: IMAGE
+          value: $(params.build-image)
+      runAfter:
+        - tests
+
+    # ── Task 6: Deploy to OpenShift ──
+    - name: deploy
+      taskRef:
+        name: openshift-client
+        kind: ClusterTask
+      params:
+        - name: SCRIPT
+          value: |
+            echo "Deploying application: $(params.app-name)"
+            oc get deployment/$(params.app-name) 2>/dev/null && \
+              oc set image deployment/$(params.app-name) \
+                $(params.app-name)=$(params.build-image) \
+                --record || \
+              oc new-app $(params.build-image) --name=$(params.app-name)
+            oc rollout status deployment/$(params.app-name)
+      runAfter:
+        - build

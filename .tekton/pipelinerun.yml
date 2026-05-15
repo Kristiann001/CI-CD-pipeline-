@@ -1,0 +1,25 @@
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  name: cd-pipeline-run
+  generateName: cd-pipeline-run-
+spec:
+  pipelineRef:
+    name: cd-pipeline
+
+  workspaces:
+    - name: pipeline-workspace
+      persistentVolumeClaim:
+        claimName: pipelinerun-pvc
+
+  params:
+    - name: repo-url
+      value: "https://github.com/Kristiann001/CI-CD-pipeline-.git"
+    - name: branch
+      value: "main"
+    - name: build-image
+      value: "image-registry.openshift-image-registry.svc:5000/$(context.pipelineRun.namespace)/counter-app:latest"
+    - name: app-name
+      value: "counter-app"
+    - name: database_uri
+      value: "redis://redis:6379"
