@@ -3,6 +3,7 @@ Counter Service
 
 A simple REST API for managing named counters backed by a Python dictionary.
 """
+import logging
 from flask import Flask, jsonify, abort
 
 app = Flask(__name__)
@@ -52,4 +53,6 @@ def delete_counter(name):
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080)
+    logging.basicConfig(level=logging.INFO)
+    logging.info("SERVICERUNNING")
+    app.run(host="0.0.0.0", port=8000)
