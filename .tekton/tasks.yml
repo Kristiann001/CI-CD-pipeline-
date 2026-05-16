@@ -20,11 +20,8 @@ spec:
           set -eu
           echo "Removing all files from workspace..."
           if [ -d "$WORKSPACE_SOURCE_PATH" ] ; then
-            # Delete non-hidden files and directories
             rm -rf "$WORKSPACE_SOURCE_PATH"/*
-            # Delete files and directories starting with . but excluding ..
             rm -rf "$WORKSPACE_SOURCE_PATH"/.[!.]*
-            # Delete files and directories starting with .. plus any other character
             rm -rf "$WORKSPACE_SOURCE_PATH"/..?*
           fi
           echo "All files deleted from workspace path: $WORKSPACE_SOURCE_PATH"
@@ -62,3 +59,34 @@ spec:
           pip install --upgrade pip && \
           pip install -qr requirements.txt && \
           nosetests $(params.args)
+
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: flake8
+spec:
+  description: >-
+    This task will run flake8 on the provided application source code.
+  workspaces:
+    - name: source
+  params:
+    - name: image
+      description: The container image to use for running flake8
+      type: string
+      default: "python:3.9-slim"
+    - name: args
+      description: Arguments to pass to flake8
+      type: array
+      default: ["--count", "--max-complexity=10", "--max-line-length=127", "--statistics"]
+  steps:
+    - name: flake8
+      image: $(params.image)
+      workingDir: $(workspaces.source.path)
+      command: ["/bin/bash", "-c"]
+      args:
+        - |-
+          pip install flake8 --quiet && \
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics && \
+          flake8 . $(params.args)
+
